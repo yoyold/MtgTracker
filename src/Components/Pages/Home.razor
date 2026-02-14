@@ -1,0 +1,341 @@
+@page "/"
+@rendermode InteractiveServer
+@using System.Timers
+
+<PageTitle>MTG Tracker</PageTitle>
+
+<div class="mtg-app">
+    <!-- Ambient background particles -->
+    <div class="bg-runes">
+        @for (int i = 0; i < 12; i++)
+        {
+            <span class="rune" style="--i:@i">✦</span>
+        }
+    </div>
+
+    <header class="app-header">
+        <div class="logo-wrap">
+            <span class="mana-symbol">⬡</span>
+            <h1>MTG Tracker</h1>
+            <span class="mana-symbol">⬡</span>
+        </div>
+        <div class="turn-badge">
+            <span class="turn-label">TURN</span>
+            <span class="turn-number">@TurnCount</span>
+            <div class="turn-controls">
+                <button class="btn-micro" @onclick="PrevTurn">◀</button>
+                <button class="btn-micro" @onclick="NextTurn">▶</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ── PLAYERS ── -->
+    <section class="players-grid">
+        @foreach (var player in Players)
+        {
+            <div class="player-card @(player.IsActive ? "active" : "")" style="--accent:@player.Color">
+                <div class="player-header">
+                    <input class="player-name" @bind="player.Name" @bind:event="oninput" />
+                    <button class="btn-active @(player.IsActive ? "on" : "")" @onclick="() => ToggleActive(player)">
+                        @(player.IsActive ? "★ Active" : "☆ Set Active")
+                    </button>
+                </div>
+
+                <!-- Life counter -->
+                <div class="life-section">
+                    <button class="life-btn minus" @onclick="() => ChangeLife(player, -1)">−</button>
+                    <button class="life-btn minus big" @onclick="() => ChangeLife(player, -5)">−5</button>
+                    <div class="life-display">
+                        <span class="life-number @(player.LifePoints <= 5 ? "danger" : player.LifePoints <= 10 ? "warning" : "")">
+                            @player.LifePoints
+                        </span>
+                        <span class="life-label">LIFE</span>
+                    </div>
+                    <button class="life-btn plus big" @onclick="() => ChangeLife(player, 5)">+5</button>
+                    <button class="life-btn plus" @onclick="() => ChangeLife(player, 1)">+</button>
+                </div>
+
+                <!-- Counters -->
+                <div class="counters-row">
+                    <div class="counter-group">
+                        <span class="counter-label">−1/−1</span>
+                        <div class="counter-controls">
+                            <button class="ctr-btn" @onclick="() => ChangeMinus(player, -1)">−</button>
+                            <span class="ctr-val @(player.MinusCounters > 0 ? "active-ctr" : "")">@player.MinusCounters</span>
+                            <button class="ctr-btn" @onclick="() => ChangeMinus(player, 1)">+</button>
+                        </div>
+                    </div>
+                    <div class="counter-divider">|</div>
+                    <div class="counter-group">
+                        <span class="counter-label">+1/+1</span>
+                        <div class="counter-controls">
+                            <button class="ctr-btn" @onclick="() => ChangePlus(player, -1)">−</button>
+                            <span class="ctr-val @(player.PlusCounters > 0 ? "active-ctr gold" : "")">@player.PlusCounters</span>
+                            <button class="ctr-btn" @onclick="() => ChangePlus(player, 1)">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Poison / Commander damage shortcut -->
+                <div class="extra-row">
+                    <div class="counter-group small">
+                        <span class="counter-label">☠ Poison</span>
+                        <div class="counter-controls">
+                            <button class="ctr-btn" @onclick="() => ChangePoison(player, -1)">−</button>
+                            <span class="ctr-val @(player.PoisonCounters >= 10 ? "danger" : player.PoisonCounters >= 5 ? "warning" : "")">@player.PoisonCounters</span>
+                            <button class="ctr-btn" @onclick="() => ChangePoison(player, 1)">+</button>
+                        </div>
+                    </div>
+                    <button class="btn-reset-player" @onclick="() => ResetPlayer(player)">Reset</button>
+                </div>
+
+                @if (player.LifePoints <= 0)
+                {
+                    <div class="eliminated-banner">☠ ELIMINATED</div>
+                }
+                @if (player.PoisonCounters >= 10)
+                {
+                    <div class="eliminated-banner poison-death">☠ POISONED OUT</div>
+                }
+            </div>
+        }
+    </section>
+
+    <!-- Add/Remove player -->
+    <div class="player-management">
+        <button class="btn-manage" @onclick="AddPlayer" disabled="@(Players.Count >= 6)">+ Add Player</button>
+        <button class="btn-manage remove" @onclick="RemovePlayer" disabled="@(Players.Count <= 1)">− Remove Player</button>
+        <button class="btn-manage reset-all" @onclick="ResetAll">⟳ Reset All</button>
+    </div>
+
+    <!-- ── TOOLS ── -->
+    <section class="tools-grid">
+
+        <!-- COIN TOSS -->
+        <div class="tool-card coin-card">
+            <h2 class="tool-title">⊕ Coin Toss</h2>
+            <div class="coin-wrap">
+                <div class="coin @CoinClass" @onclick="TossCoin">
+                    <div class="coin-face front">
+                        <span>H</span>
+                    </div>
+                    <div class="coin-face back">
+                        <span>T</span>
+                    </div>
+                </div>
+            </div>
+            @if (CoinResult != null)
+            {
+                <div class="result-label coin-result @(CoinResult == "Heads" ? "heads" : "tails")">
+                    @CoinResult
+                </div>
+            }
+            <button class="btn-tool" @onclick="TossCoin" disabled="@IsCoinFlipping">
+                @(IsCoinFlipping ? "Flipping…" : "Toss Coin")
+            </button>
+            <div class="toss-history">
+                @foreach (var r in CoinHistory.TakeLast(10).Reverse())
+                {
+                    <span class="history-chip @(r == "H" ? "heads" : "tails")">@r</span>
+                }
+            </div>
+        </div>
+
+        <!-- DICE ROLL -->
+        <div class="tool-card dice-card">
+            <h2 class="tool-title">⚄ Dice Roll</h2>
+            <div class="dice-selector">
+                @foreach (var d in new[] { 4, 6, 8, 10, 12, 20, 100 })
+                {
+                    <button class="die-btn @(SelectedDie == d ? "selected" : "")" @onclick="() => SelectDie(d)">d@(d)</button>
+                }
+            </div>
+            <div class="die-display @DiceClass">
+                @if (DiceResult.HasValue)
+                {
+                    <span class="die-number @(DiceResult == SelectedDie ? "crit" : DiceResult == 1 ? "fail" : "")">
+                        @DiceResult
+                    </span>
+                    <span class="die-label">/ @SelectedDie</span>
+                }
+                else
+                {
+                    <span class="die-number muted">?</span>
+                }
+            </div>
+            @if (DiceResult == SelectedDie)
+            {
+                <div class="crit-label">⚡ CRITICAL!</div>
+            }
+            @if (DiceResult == 1)
+            {
+                <div class="fail-label">💀 FUMBLE!</div>
+            }
+            <button class="btn-tool" @onclick="RollDice" disabled="@IsDiceRolling">
+                @(IsDiceRolling ? "Rolling…" : $"Roll d{SelectedDie}")
+            </button>
+            <div class="toss-history">
+                @foreach (var r in DiceHistory.TakeLast(10).Reverse())
+                {
+                    <span class="history-chip">@r</span>
+                }
+            </div>
+        </div>
+
+    </section>
+</div>
+
+@code {
+    // ── Data Models ──────────────────────────────────────────────
+    class Player
+    {
+        private static int _nextId = 1;
+        public int Id { get; } = _nextId++;
+        public string Name { get; set; } = "";
+        public int LifePoints { get; set; } = 20;
+        public int PlusCounters { get; set; } = 0;
+        public int MinusCounters { get; set; } = 0;
+        public int PoisonCounters { get; set; } = 0;
+        public bool IsActive { get; set; } = false;
+        public string Color { get; set; } = "#c9a84c";
+    }
+
+    // ── State ─────────────────────────────────────────────────────
+    List<Player> Players = new();
+    int TurnCount = 1;
+
+    string? CoinResult = null;
+    bool IsCoinFlipping = false;
+    string CoinClass = "";
+    List<string> CoinHistory = new();
+
+    int SelectedDie = 20;
+    int? DiceResult = null;
+    bool IsDiceRolling = false;
+    string DiceClass = "";
+    List<int> DiceHistory = new();
+
+    readonly string[] PlayerColors = { "#c9a84c", "#6e8fcb", "#c96e6e", "#6ec98a", "#c96ec9", "#c9986e" };
+
+    // ── Lifecycle ─────────────────────────────────────────────────
+    protected override void OnInitialized()
+    {
+        for (int i = 0; i < 2; i++) AddPlayer();
+        Players[0].IsActive = true;
+    }
+
+    // ── Player Management ─────────────────────────────────────────
+    void AddPlayer()
+    {
+        var idx = Players.Count % PlayerColors.Length;
+        Players.Add(new Player
+        {
+            Name = $"Player {Players.Count + 1}",
+            Color = PlayerColors[idx]
+        });
+    }
+
+    void RemovePlayer()
+    {
+        if (Players.Count > 1)
+            Players.RemoveAt(Players.Count - 1);
+    }
+
+    void ToggleActive(Player p)
+    {
+        foreach (var player in Players) player.IsActive = false;
+        p.IsActive = true;
+    }
+
+    void ChangeLife(Player p, int delta) => p.LifePoints += delta;
+    void ChangePlus(Player p, int delta) => p.PlusCounters = Math.Max(0, p.PlusCounters + delta);
+    void ChangeMinus(Player p, int delta) => p.MinusCounters = Math.Max(0, p.MinusCounters + delta);
+    void ChangePoison(Player p, int delta) => p.PoisonCounters = Math.Max(0, p.PoisonCounters + delta);
+
+    void ResetPlayer(Player p)
+    {
+        p.LifePoints = 20;
+        p.PlusCounters = 0;
+        p.MinusCounters = 0;
+        p.PoisonCounters = 0;
+    }
+
+    void ResetAll()
+    {
+        TurnCount = 1;
+        CoinResult = null;
+        CoinHistory.Clear();
+        DiceResult = null;
+        DiceHistory.Clear();
+        foreach (var p in Players) ResetPlayer(p);
+        Players[0].IsActive = true;
+    }
+
+    // ── Turn ──────────────────────────────────────────────────────
+    void NextTurn()
+    {
+        TurnCount++;
+        // Advance active player
+        var idx = Players.FindIndex(p => p.IsActive);
+        if (idx >= 0)
+        {
+            Players[idx].IsActive = false;
+            Players[(idx + 1) % Players.Count].IsActive = true;
+        }
+    }
+
+    void PrevTurn()
+    {
+        if (TurnCount > 1)
+        {
+            TurnCount--;
+            var idx = Players.FindIndex(p => p.IsActive);
+            if (idx >= 0)
+            {
+                Players[idx].IsActive = false;
+                Players[(idx - 1 + Players.Count) % Players.Count].IsActive = true;
+            }
+        }
+    }
+
+    // ── Coin Toss ─────────────────────────────────────────────────
+    async Task TossCoin()
+    {
+        if (IsCoinFlipping) return;
+        IsCoinFlipping = true;
+        CoinResult = null;
+        CoinClass = "flipping";
+        StateHasChanged();
+        await Task.Delay(900);
+        var rng = new Random();
+        bool isHeads = rng.Next(2) == 0;
+        CoinResult = isHeads ? "Heads" : "Tails";
+        CoinHistory.Add(isHeads ? "H" : "T");
+        CoinClass = isHeads ? "show-heads" : "show-tails";
+        IsCoinFlipping = false;
+        StateHasChanged();
+    }
+
+    // ── Dice Roll ─────────────────────────────────────────────────
+    void SelectDie(int sides)
+    {
+        SelectedDie = sides;
+        DiceResult = null;
+    }
+
+    async Task RollDice()
+    {
+        if (IsDiceRolling) return;
+        IsDiceRolling = true;
+        DiceResult = null;
+        DiceClass = "rolling";
+        StateHasChanged();
+        await Task.Delay(700);
+        var rng = new Random();
+        DiceResult = rng.Next(1, SelectedDie + 1);
+        DiceHistory.Add(DiceResult.Value);
+        DiceClass = "rolled";
+        IsDiceRolling = false;
+        StateHasChanged();
+    }
+}
