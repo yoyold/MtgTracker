@@ -1,9 +1,7 @@
 /* ───────────────────────────────────────────────────────
    MTG TRACKER  |  Dark Arcane Aesthetic
-   Fonts: Cinzel (display) + Crimson Pro (body)
+   Fonts: Palatino (display) + Georgia (body) — system fonts, no external requests
 ─────────────────────────────────────────────────────── */
-
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300&display=swap');
 
 /* ── CSS Variables ── */
 :root {
@@ -32,7 +30,7 @@
 body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Crimson Pro', Georgia, serif;
+    font-family: Georgia, 'Times New Roman', Times, serif;
     font-size: 16px;
     min-height: 100vh;
     overflow-x: hidden;
@@ -91,7 +89,7 @@ body {
 }
 
 .logo-wrap h1 {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-weight: 900;
     font-size: clamp(1.2rem, 3vw, 2rem);
     letter-spacing: .12em;
@@ -127,14 +125,14 @@ body {
 }
 
 .turn-label {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .6rem;
     letter-spacing: .2em;
     color: var(--text-dim);
 }
 
 .turn-number {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: 1.8rem;
     font-weight: 700;
     color: var(--gold);
@@ -214,7 +212,7 @@ body {
     border: none;
     border-bottom: 1px solid var(--border);
     color: var(--text);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .95rem;
     font-weight: 700;
     letter-spacing: .05em;
@@ -234,7 +232,7 @@ body {
     border: 1px solid var(--border);
     color: var(--text-dim);
     font-size: .65rem;
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     letter-spacing: .06em;
     padding: .25rem .6rem;
     border-radius: 20px;
@@ -265,7 +263,7 @@ body {
 }
 
 .life-number {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: 3.5rem;
     font-weight: 900;
     line-height: 1;
@@ -290,7 +288,7 @@ body {
 }
 
 .life-label {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .55rem;
     letter-spacing: .25em;
     color: var(--text-dim);
@@ -313,7 +311,7 @@ body {
 .life-btn.big {
     font-size: .8rem;
     width: 2.6rem;
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     letter-spacing: -.02em;
 }
 
@@ -347,7 +345,7 @@ body {
 .counter-group.small { flex: 1; }
 
 .counter-label {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .6rem;
     letter-spacing: .1em;
     color: var(--text-dim);
@@ -377,7 +375,7 @@ body {
 .ctr-btn:hover { background: var(--bg2); color: var(--text); border-color: var(--border-glow); }
 
 .ctr-val {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: 1.1rem;
     font-weight: 700;
     min-width: 1.5rem;
@@ -401,7 +399,7 @@ body {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-dim);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .65rem;
     letter-spacing: .08em;
     padding: .3rem .7rem;
@@ -420,7 +418,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-weight: 900;
     font-size: 1.3rem;
     letter-spacing: .1em;
@@ -450,7 +448,7 @@ body {
     background: var(--bg2);
     border: 1px solid var(--border);
     color: var(--text-dim);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .7rem;
     letter-spacing: .1em;
     padding: .45rem 1rem;
@@ -487,7 +485,7 @@ body {
 }
 
 .tool-title {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .85rem;
     font-weight: 700;
     letter-spacing: .15em;
@@ -531,7 +529,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: 2rem;
     font-weight: 900;
     backface-visibility: hidden;
@@ -551,7 +549,7 @@ body {
 }
 
 .result-label {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: 1.4rem;
     font-weight: 700;
     letter-spacing: .1em;
@@ -578,7 +576,7 @@ body {
     background: var(--bg3);
     border: 1px solid var(--border);
     color: var(--text-dim);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .65rem;
     letter-spacing: .05em;
     padding: .3rem .6rem;
@@ -639,7 +637,7 @@ body {
 }
 
 .die-number {
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: 2.2rem;
     font-weight: 900;
     color: var(--gold);
@@ -665,12 +663,12 @@ body {
 .die-label {
     font-size: .65rem;
     color: var(--text-dim);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
 }
 
 .crit-label {
     color: var(--gold-bright);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-weight: 700;
     font-size: .9rem;
     letter-spacing: .12em;
@@ -680,7 +678,7 @@ body {
 
 .fail-label {
     color: var(--danger);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .9rem;
     letter-spacing: .08em;
     animation: popIn .3s ease;
@@ -691,7 +689,7 @@ body {
     background: linear-gradient(135deg, rgba(201,168,76,.15), rgba(201,168,76,.05));
     border: 1px solid var(--gold-dim);
     color: var(--gold);
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .75rem;
     font-weight: 700;
     letter-spacing: .12em;
@@ -724,7 +722,7 @@ body {
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: .1rem .35rem;
-    font-family: 'Cinzel', serif;
+    font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     font-size: .65rem;
     color: var(--text-dim);
 }
