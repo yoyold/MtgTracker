@@ -1,5 +1,6 @@
 @page "/"
 @using System.Timers
+@implements IDisposable
 
 <PageTitle>MTG Tracker</PageTitle>
 
@@ -18,6 +19,23 @@
             <h1>MTG Tracker</h1>
             <span class="mana-symbol">⬡</span>
         </div>
+
+        @if (Widgets["timer"])
+        {
+            <div class="turn-timer @(IsSlowPlay ? "slow" : "") @(TimerPaused ? "paused" : "")" title="@(TimerPaused ? "Timer paused" : "Turn timer")">
+                <span class="tt-label">Turn Time</span>
+                <span class="tt-value">@FormatTime(ElapsedSeconds)</span>
+                <div class="tt-controls">
+                    <button class="btn-micro" @onclick="ToggleTimerPause" title="@(TimerPaused ? "Resume" : "Pause")">@(TimerPaused ? "▶" : "⏸")</button>
+                    <button class="btn-micro" @onclick="ResetTurnTimer" title="Reset">⟳</button>
+                </div>
+                @if (IsSlowPlay)
+                {
+                    <span class="tt-warn">⚠ Slow Play</span>
+                }
+            </div>
+        }
+
         <div class="turn-badge">
             <span class="turn-label">Turn</span>
             <span class="turn-number">@TurnCount</span>
@@ -26,8 +44,92 @@
                 <button class="btn-micro" @onclick="NextTurn" title="Next Turn">▶</button>
             </div>
         </div>
+
+        <button class="btn-menu" @onclick="() => ShowMenu = !ShowMenu" title="Menu">
+            <span>@(ShowMenu ? "✕" : "☰")</span>
+        </button>
     </header>
 
+    @if (ShowMenu)
+    {
+        <aside class="settings-panel">
+            <div class="settings-group">
+                <h3>Widgets</h3>
+                <div class="widget-toggles">
+                    @foreach (var w in WidgetList)
+                    {
+                        <label class="toggle-row">
+                            <input type="checkbox" checked="@Widgets[w.Key]" @onchange="e => SetWidget(w.Key, (bool)e.Value!)" />
+                            <span>@w.Label</span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3>Turn Timer</h3>
+                <label class="toggle-row">
+                    <input type="checkbox" checked="@Widgets["timer"]" @onchange="ToggleTimerWidget" />
+                    <span>Enable turn timer</span>
+                </label>
+                <div class="setting-field">
+                    <label>Slow-play threshold (seconds)</label>
+                    <input type="number" min="10" max="1800" step="5" @bind="SlowPlayThreshold" />
+                </div>
+                <div class="setting-hint">Active player: <b>@(Players.FirstOrDefault(p => p.IsActive)?.Name ?? "—")</b></div>
+            </div>
+
+            <div class="settings-group">
+                <h3>Commander Format</h3>
+                <label class="toggle-row">
+                    <input type="checkbox" checked="@Widgets["commander"]" @onchange="ToggleCommanderWidget" />
+                    <span>Show commander section</span>
+                </label>
+                <div class="setting-field">
+                    <label>Starting life</label>
+                    <input type="number" min="1" max="999" @bind="StartingLife" />
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3>Counter Automation</h3>
+                <label class="toggle-row">
+                    <input type="checkbox" @bind="AutoPoisonLoss" />
+                    <span>Auto-eliminate at 10 poison</span>
+                </label>
+                <label class="toggle-row">
+                    <input type="checkbox" @bind="AutoCommanderLoss" />
+                    <span>Auto-eliminate at 21 commander damage</span>
+                </label>
+                <label class="toggle-row">
+                    <input type="checkbox" @bind="AutoPlusMinusCancel" />
+                    <span>Auto-cancel +1/+1 with −1/−1</span>
+                </label>
+            </div>
+
+            <div class="settings-group">
+                <button class="btn-manage" @onclick="() => ShowMenu = false">Close</button>
+            </div>
+        </aside>
+    }
+
+    @if (Widgets["notes"])
+    {
+        <section class="notes-widget">
+            <div class="notes-header">
+                <span class="notes-title">✎ &nbsp; Shared Board Notes</span>
+                <button class="btn-micro" @onclick="ClearNotes" title="Clear">⟳ Clear</button>
+            </div>
+            <textarea class="notes-area"
+                      placeholder="Track triggers, delayed effects, complicated board states…"
+                      @bind="SharedNotes"
+                      @bind:event="oninput"
+                      rows="4"></textarea>
+        </section>
+    }
+
+    @if (Widgets["players"])
+    {
     <!-- Players -->
     <section class="players-grid">
         @foreach (var player in Players)
@@ -44,42 +146,131 @@
                         <button class="life-btn minus" @onclick="() => ChangeLife(player, -1)" title="-1">−</button>
                         <button class="life-btn minus big" @onclick="() => ChangeLife(player, -5)" title="-5">−5</button>
                         <div class="life-display">
-                            <span class="life-number @(player.LifePoints <= 5 ? "danger" : player.LifePoints <= 10 ? "warning" : "")">@player.LifePoints</span>
+                            <span class="life-number @LifeClass(player)">@player.LifePoints</span>
                             <span class="life-label">Life Points</span>
                         </div>
                         <button class="life-btn plus big" @onclick="() => ChangeLife(player, 5)" title="+5">+5</button>
                         <button class="life-btn plus" @onclick="() => ChangeLife(player, 1)" title="+1">+</button>
                     </div>
 
-                    <div class="counters-row">
-                        <div class="counter-group">
-                            <span class="counter-label">−1/−1</span>
-                            <div class="counter-controls">
-                                <button class="ctr-btn" @onclick="() => ChangeMinus(player, -1)">−</button>
-                                <span class="ctr-val @(player.MinusCounters > 0 ? "active-ctr" : "")">@player.MinusCounters</span>
-                                <button class="ctr-btn" @onclick="() => ChangeMinus(player, 1)">+</button>
+                    @if (Widgets["counters"])
+                    {
+                        <div class="counters-wrap">
+                            @foreach (var c in player.Counters.Keys.ToList())
+                            {
+                                <div class="counter-chip @CounterStateClass(c, player.Counters[c])">
+                                    <span class="counter-label">@CounterIcon(c) @c</span>
+                                    <div class="counter-controls">
+                                        <button class="ctr-btn" @onclick="() => ChangeCounter(player, c, -1)">−</button>
+                                        <span class="ctr-val">@player.Counters[c]</span>
+                                        <button class="ctr-btn" @onclick="() => ChangeCounter(player, c, 1)">+</button>
+                                        <button class="ctr-x" @onclick="() => RemoveCounter(player, c)" title="Remove">×</button>
+                                    </div>
+                                </div>
+                            }
+                            <div class="counter-add">
+                                <select class="counter-select" @bind="player.PendingCounter">
+                                    <option value="">+ Add counter…</option>
+                                    @foreach (var preset in CounterPresets)
+                                    {
+                                        @if (!player.Counters.ContainsKey(preset))
+                                        {
+                                            <option value="@preset">@preset</option>
+                                        }
+                                    }
+                                    <option value="__custom__">Custom…</option>
+                                </select>
+                                @if (player.PendingCounter == "__custom__")
+                                {
+                                    <input class="counter-custom" placeholder="Name" @bind="player.CustomCounterName" @bind:event="oninput" />
+                                }
+                                <button class="btn-mini" @onclick="() => AddCounter(player)" disabled="@string.IsNullOrEmpty(player.PendingCounter)">Add</button>
                             </div>
                         </div>
-                        <div class="counter-divider">|</div>
-                        <div class="counter-group">
-                            <span class="counter-label">+1/+1</span>
-                            <div class="counter-controls">
-                                <button class="ctr-btn" @onclick="() => ChangePlus(player, -1)">−</button>
-                                <span class="ctr-val @(player.PlusCounters > 0 ? "active-ctr gold" : "")">@player.PlusCounters</span>
-                                <button class="ctr-btn" @onclick="() => ChangePlus(player, 1)">+</button>
+                    }
+
+                    @if (Widgets["commander"])
+                    {
+                        <div class="commander-block">
+                            <div class="cmd-header">
+                                <span class="cmd-title">⚔ Commander</span>
+                                <label class="cmd-partner-toggle">
+                                    <input type="checkbox" @bind="player.HasPartner" />
+                                    <span>Partner</span>
+                                </label>
+                            </div>
+
+                            <div class="cmd-row">
+                                <input class="cmd-name" placeholder="Commander name" @bind="player.CommanderName" @bind:event="oninput" />
+                                <div class="cmd-tax" title="Commander tax (2 per prior cast)">
+                                    <span class="cmd-tax-label">Tax</span>
+                                    <span class="cmd-tax-val">+@(player.CommanderCasts * 2)</span>
+                                </div>
+                                <button class="btn-mini" @onclick="() => CastCommander(player, false)">Cast</button>
+                                <button class="btn-mini ghost" @onclick="() => { player.CommanderCasts = 0; }" title="Reset tax">⟳</button>
+                            </div>
+
+                            @if (player.HasPartner)
+                            {
+                                <div class="cmd-row">
+                                    <input class="cmd-name" placeholder="Partner name" @bind="player.PartnerName" @bind:event="oninput" />
+                                    <div class="cmd-tax" title="Partner tax">
+                                        <span class="cmd-tax-label">Tax</span>
+                                        <span class="cmd-tax-val">+@(player.PartnerCasts * 2)</span>
+                                    </div>
+                                    <button class="btn-mini" @onclick="() => CastCommander(player, true)">Cast</button>
+                                    <button class="btn-mini ghost" @onclick="() => { player.PartnerCasts = 0; }" title="Reset tax">⟳</button>
+                                </div>
+                            }
+
+                            <div class="cmd-damage-title">Commander damage received</div>
+                            <div class="cmd-damage-grid">
+                                @foreach (var opp in Players.Where(o => o.Id != player.Id))
+                                {
+                                    var keyMain = $"{opp.Id}:0";
+                                    var keyPartner = $"{opp.Id}:1";
+                                    <div class="cmd-damage-cell @(player.CommanderDamage.GetValueOrDefault(keyMain) >= 21 ? "lethal" : "")">
+                                        <span class="cd-from" style="color:@opp.Color">⚑ @(string.IsNullOrWhiteSpace(opp.Name) ? $"P{opp.Id}" : opp.Name)</span>
+                                        <div class="cd-controls">
+                                            <button class="ctr-btn" @onclick="() => ChangeCmdDamage(player, keyMain, -1)">−</button>
+                                            <span class="cd-val">@player.CommanderDamage.GetValueOrDefault(keyMain)</span>
+                                            <button class="ctr-btn" @onclick="() => ChangeCmdDamage(player, keyMain, 1)">+</button>
+                                        </div>
+                                        @if (opp.HasPartner)
+                                        {
+                                            <div class="cd-controls partner @(player.CommanderDamage.GetValueOrDefault(keyPartner) >= 21 ? "lethal" : "")">
+                                                <span class="cd-sub">Partner</span>
+                                                <button class="ctr-btn" @onclick="() => ChangeCmdDamage(player, keyPartner, -1)">−</button>
+                                                <span class="cd-val">@player.CommanderDamage.GetValueOrDefault(keyPartner)</span>
+                                                <button class="ctr-btn" @onclick="() => ChangeCmdDamage(player, keyPartner, 1)">+</button>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                @if (Players.Count <= 1)
+                                {
+                                    <div class="cmd-damage-empty">Add opponents to track commander damage</div>
+                                }
+                            </div>
+
+                            <div class="emblem-section">
+                                <div class="emblem-title">✧ Emblems &amp; Effects</div>
+                                <div class="emblem-list">
+                                    @foreach (var emblem in player.Emblems.ToList())
+                                    {
+                                        <span class="emblem-chip">@emblem <button class="emb-x" @onclick="() => player.Emblems.Remove(emblem)">×</button></span>
+                                    }
+                                    <div class="emblem-add">
+                                        <input class="emblem-input" placeholder="Emblem / effect…" @bind="player.PendingEmblem" @bind:event="oninput"
+                                               @onkeydown="e => EmblemKey(e, player)" />
+                                        <button class="btn-mini" @onclick="() => AddEmblem(player)" disabled="@string.IsNullOrWhiteSpace(player.PendingEmblem)">+</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    }
 
                     <div class="extra-row">
-                        <div class="counter-group">
-                            <span class="counter-label">☠ Poison</span>
-                            <div class="counter-controls">
-                                <button class="ctr-btn" @onclick="() => ChangePoison(player, -1)">−</button>
-                                <span class="ctr-val @(player.PoisonCounters >= 10 ? "danger" : player.PoisonCounters >= 5 ? "warning" : "")">@player.PoisonCounters</span>
-                                <button class="ctr-btn" @onclick="() => ChangePoison(player, 1)">+</button>
-                            </div>
-                        </div>
                         <button class="btn-reset-player" @onclick="() => ResetPlayer(player)">⟳ Reset</button>
                     </div>
                 </div>
@@ -88,9 +279,13 @@
                 {
                     <div class="eliminated-banner">☠ Eliminated</div>
                 }
-                @if (player.PoisonCounters >= 10)
+                else if (AutoPoisonLoss && player.Counters.GetValueOrDefault("Poison") >= 10)
                 {
                     <div class="eliminated-banner poison-death">☠ Poisoned Out</div>
+                }
+                else if (AutoCommanderLoss && player.CommanderDamage.Values.Any(v => v >= 21))
+                {
+                    <div class="eliminated-banner cmd-death">⚔ Commander Kill</div>
                 }
             </div>
         }
@@ -101,149 +296,223 @@
         <button class="btn-manage remove" @onclick="RemovePlayer" disabled="@(Players.Count <= 1)">− Remove</button>
         <button class="btn-manage reset-all" @onclick="ResetAll">⟳ Reset All</button>
     </div>
+    }
 
-    <div class="tools-divider">⬡ &nbsp; Utilities &nbsp; ⬡</div>
+    @if (Widgets["coin"] || Widgets["dice"])
+    {
+        <div class="tools-divider">⬡ &nbsp; Utilities &nbsp; ⬡</div>
 
-    <!-- Tools -->
-    <section class="tools-grid">
+        <section class="tools-grid">
 
-        <!-- COIN TOSS -->
-        <div class="tool-card">
-            <h2 class="tool-title">⊕ &nbsp; Coin Toss</h2>
-
-            <div class="coin-wrap" @onclick="TossCoin">
-                <div class="coin @CoinClass">
-                    <div class="coin-face front">
-                        <div class="coin-inner">
-                            <span class="coin-letter">H</span>
-                            <span class="coin-text">Heads</span>
-                        </div>
-                    </div>
-                    <div class="coin-face back">
-                        <div class="coin-inner">
-                            <span class="coin-letter">T</span>
-                            <span class="coin-text">Tails</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            @if (CoinResult != null)
+            @if (Widgets["coin"])
             {
-                <div class="result-label @(CoinResult == "Heads" ? "heads" : "tails")">@CoinResult</div>
-            }
-            else
-            {
-                <div style="height:2rem"></div>
-            }
+                <!-- COIN TOSS -->
+                <div class="tool-card">
+                    <h2 class="tool-title">⊕ &nbsp; Coin Toss</h2>
 
-            <button class="btn-tool" @onclick="TossCoin" disabled="@IsCoinFlipping">
-                @(IsCoinFlipping ? "Flipping…" : "Toss Coin")
-            </button>
-
-            <div class="toss-history">
-                @foreach (var r in CoinHistory.TakeLast(10).Reverse())
-                {
-                    <span class="history-chip @(r == "H" ? "heads" : "tails")">@r</span>
-                }
-            </div>
-        </div>
-
-        <!-- DICE ROLL -->
-        <div class="tool-card" style="--die-color:@DieAccentColor">
-            <h2 class="tool-title">⚄ &nbsp; Dice Roll</h2>
-
-            <!-- Selector ABOVE the 3D scene in normal flow — no overlap possible -->
-            <div class="dice-selector">
-                @foreach (var d in DieOptions)
-                {
-                    <button class="die-btn @(SelectedDie == d.Sides ? "selected" : "")"
-                            data-die="@d.Sides"
-                            style="@(SelectedDie == d.Sides ? $"--die-color:{d.Color}" : "")"
-                            @onclick="() => SelectDie(d.Sides, d.Color)">
-                        d@(d.Sides)
-                    </button>
-                }
-            </div>
-
-            <!-- 3D scene in its own wrapper with reserved height -->
-            <div class="dice-scene-wrapper">
-                <div class="dice-scene" @onclick="RollDice">
-                    <div class="dice-cube @DiceClass">
-                        <div class="dice-face front @FaceClass">
-                            @if (DiceResult.HasValue)
-                            {
-                                <div class="die-result-display">
-                                    <span class="die-number">@DiceResult</span>
-                                    <span class="die-label">/ @SelectedDie</span>
+                    <div class="coin-wrap" @onclick="TossCoin">
+                        <div class="coin @CoinClass">
+                            <div class="coin-face front">
+                                <div class="coin-inner">
+                                    <span class="coin-letter">H</span>
+                                    <span class="coin-text">Heads</span>
                                 </div>
-                            }
-                            else
-                            {
-                                <span style="color:var(--die-color,#4a8fdc);font-size:1.6rem;opacity:.35">?</span>
-                            }
+                            </div>
+                            <div class="coin-face back">
+                                <div class="coin-inner">
+                                    <span class="coin-letter">T</span>
+                                    <span class="coin-text">Tails</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="dice-face back">  <span class="pip-icon">⚄</span></div>
-                        <div class="dice-face right"> <span class="pip-icon">⚅</span></div>
-                        <div class="dice-face left">  <span class="pip-icon">⚂</span></div>
-                        <div class="dice-face top">   <span class="pip-icon">⚃</span></div>
-                        <div class="dice-face bottom"><span class="pip-icon">⚁</span></div>
+                    </div>
+
+                    @if (CoinResult != null)
+                    {
+                        <div class="result-label @(CoinResult == "Heads" ? "heads" : "tails")">@CoinResult</div>
+                    }
+                    else
+                    {
+                        <div style="height:2rem"></div>
+                    }
+
+                    <button class="btn-tool" @onclick="TossCoin" disabled="@IsCoinFlipping">
+                        @(IsCoinFlipping ? "Flipping…" : "Toss Coin")
+                    </button>
+
+                    <div class="toss-history">
+                        @foreach (var r in CoinHistory.TakeLast(10).Reverse())
+                        {
+                            <span class="history-chip @(r == "H" ? "heads" : "tails")">@r</span>
+                        }
                     </div>
                 </div>
+            }
 
-                @if (DiceResult == SelectedDie)
-                {
-                    <div class="crit-label">⚡ Critical Hit!</div>
-                }
-                else if (DiceResult == 1)
-                {
-                    <div class="fail-label">💀 Fumble!</div>
-                }
-                else if (DiceResult.HasValue)
-                {
-                    <div style="height:1.4rem;color:var(--tx3);font-size:.7rem;text-align:center;letter-spacing:.1em">
-                        rolled @DiceResult
+            @if (Widgets["dice"])
+            {
+                <!-- DICE ROLL -->
+                <div class="tool-card" style="--die-color:@DieAccentColor">
+                    <h2 class="tool-title">⚄ &nbsp; Dice Roll</h2>
+
+                    <div class="dice-selector">
+                        @foreach (var d in DieOptions)
+                        {
+                            <button class="die-btn @(SelectedDie == d.Sides ? "selected" : "")"
+                                    data-die="@d.Sides"
+                                    style="@(SelectedDie == d.Sides ? $"--die-color:{d.Color}" : "")"
+                                    @onclick="() => SelectDie(d.Sides, d.Color)">
+                                d@(d.Sides)
+                            </button>
+                        }
                     </div>
-                }
-                else
-                {
-                    <div style="height:1.4rem"></div>
-                }
-            </div>
 
-            <button class="btn-tool" @onclick="RollDice" disabled="@IsDiceRolling">
-                @(IsDiceRolling ? "Rolling…" : $"Roll d{SelectedDie}")
-            </button>
+                    <div class="dice-scene-wrapper">
+                        <div class="dice-scene" @onclick="RollDice">
+                            <div class="dice-cube @DiceClass">
+                                <div class="dice-face front @FaceClass">
+                                    @if (DiceResult.HasValue)
+                                    {
+                                        <div class="die-result-display">
+                                            <span class="die-number">@DiceResult</span>
+                                            <span class="die-label">/ @SelectedDie</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:var(--die-color,#4a8fdc);font-size:1.6rem;opacity:.35">?</span>
+                                    }
+                                </div>
+                                <div class="dice-face back">  <span class="pip-icon">⚄</span></div>
+                                <div class="dice-face right"> <span class="pip-icon">⚅</span></div>
+                                <div class="dice-face left">  <span class="pip-icon">⚂</span></div>
+                                <div class="dice-face top">   <span class="pip-icon">⚃</span></div>
+                                <div class="dice-face bottom"><span class="pip-icon">⚁</span></div>
+                            </div>
+                        </div>
 
-            <div class="toss-history">
-                @foreach (var r in DiceHistory.TakeLast(10).Reverse())
-                {
-                    <span class="history-chip">@r</span>
-                }
-            </div>
-        </div>
+                        @if (DiceResult == SelectedDie)
+                        {
+                            <div class="crit-label">⚡ Critical Hit!</div>
+                        }
+                        else if (DiceResult == 1)
+                        {
+                            <div class="fail-label">💀 Fumble!</div>
+                        }
+                        else if (DiceResult.HasValue)
+                        {
+                            <div style="height:1.4rem;color:var(--tx3);font-size:.7rem;text-align:center;letter-spacing:.1em">
+                                rolled @DiceResult
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="height:1.4rem"></div>
+                        }
+                    </div>
 
-    </section>
+                    <button class="btn-tool" @onclick="RollDice" disabled="@IsDiceRolling">
+                        @(IsDiceRolling ? "Rolling…" : $"Roll d{SelectedDie}")
+                    </button>
+
+                    <div class="toss-history">
+                        @foreach (var r in DiceHistory.TakeLast(10).Reverse())
+                        {
+                            <span class="history-chip">@r</span>
+                        }
+                    </div>
+                </div>
+            }
+
+        </section>
+    }
 </div>
 
 @code {
     record DieOption(int Sides, string Color);
+    record WidgetDef(string Key, string Label);
 
     class Player
     {
         private static int _id = 1;
         public int Id { get; } = _id++;
         public string Name { get; set; } = "";
-        public int LifePoints    { get; set; } = 20;
-        public int PlusCounters  { get; set; } = 0;
-        public int MinusCounters { get; set; } = 0;
-        public int PoisonCounters{ get; set; } = 0;
-        public bool IsActive     { get; set; } = false;
-        public string Color      { get; set; } = "#d4a83c";
+        public int LifePoints { get; set; } = 20;
+        public Dictionary<string, int> Counters { get; set; } = new()
+        {
+            ["+1/+1"] = 0,
+            ["-1/-1"] = 0,
+            ["Poison"] = 0,
+        };
+        public bool IsActive { get; set; } = false;
+        public string Color { get; set; } = "#d4a83c";
+
+        // Commander
+        public string CommanderName { get; set; } = "";
+        public int CommanderCasts { get; set; } = 0;
+        public bool HasPartner { get; set; } = false;
+        public string PartnerName { get; set; } = "";
+        public int PartnerCasts { get; set; } = 0;
+        // key format: "{opponentId}:{slot}" — slot 0 = main commander, 1 = partner
+        public Dictionary<string, int> CommanderDamage { get; set; } = new();
+        public List<string> Emblems { get; set; } = new();
+
+        // Transient UI state
+        public string PendingCounter { get; set; } = "";
+        public string CustomCounterName { get; set; } = "";
+        public string PendingEmblem { get; set; } = "";
     }
 
     List<Player> Players = new();
     int TurnCount = 1;
+    int StartingLife = 20;
+
+    // Menu & widgets
+    bool ShowMenu = false;
+    Dictionary<string, bool> Widgets = new()
+    {
+        ["players"]   = true,
+        ["counters"]  = true,
+        ["commander"] = false,
+        ["timer"]     = false,
+        ["notes"]     = false,
+        ["coin"]      = true,
+        ["dice"]      = true,
+    };
+    readonly WidgetDef[] WidgetList = new[]
+    {
+        new WidgetDef("players",   "Players grid"),
+        new WidgetDef("counters",  "Counters"),
+        new WidgetDef("commander", "Commander panel"),
+        new WidgetDef("timer",     "Turn timer"),
+        new WidgetDef("notes",     "Shared notes"),
+        new WidgetDef("coin",      "Coin toss"),
+        new WidgetDef("dice",      "Dice roll"),
+    };
+
+    // Turn timer
+    System.Timers.Timer? _tick;
+    DateTime _turnStartedAt = DateTime.Now;
+    TimeSpan _accumulated = TimeSpan.Zero;
+    bool TimerPaused = false;
+    int SlowPlayThreshold = 120;
+    int ElapsedSeconds => (int)((TimerPaused ? _accumulated : _accumulated + (DateTime.Now - _turnStartedAt))).TotalSeconds;
+    bool IsSlowPlay => Widgets["timer"] && ElapsedSeconds >= SlowPlayThreshold;
+
+    // Automation toggles
+    bool AutoPoisonLoss = true;
+    bool AutoCommanderLoss = true;
+    bool AutoPlusMinusCancel = false;
+
+    // Shared notes
+    string SharedNotes = "";
+
+    // Counter presets
+    readonly string[] CounterPresets = new[]
+    {
+        "+1/+1", "-1/-1", "Poison", "Energy", "Experience",
+        "Charge", "Loyalty", "Ki", "Time", "Fate", "Quest", "Storage"
+    };
 
     // Coin
     string? CoinResult = null;
@@ -279,29 +548,175 @@
     {
         AddPlayer(); AddPlayer();
         Players[0].IsActive = true;
+        _turnStartedAt = DateTime.Now;
+
+        _tick = new System.Timers.Timer(500);
+        _tick.Elapsed += async (_, _) => await InvokeAsync(StateHasChanged);
+        _tick.AutoReset = true;
+        _tick.Start();
     }
+
+    public void Dispose()
+    {
+        _tick?.Stop();
+        _tick?.Dispose();
+    }
+
+    void SetWidget(string key, bool value) => Widgets[key] = value;
+    void ToggleTimerWidget(ChangeEventArgs e) => Widgets["timer"] = e.Value is bool b && b;
+    void ToggleCommanderWidget(ChangeEventArgs e) => Widgets["commander"] = e.Value is bool b && b;
 
     void AddPlayer()
     {
         var i = Players.Count % PlayerColors.Length;
-        Players.Add(new Player { Name = $"Player {Players.Count + 1}", Color = PlayerColors[i] });
+        Players.Add(new Player { Name = $"Player {Players.Count + 1}", Color = PlayerColors[i], LifePoints = StartingLife });
     }
 
-    void RemovePlayer() { if (Players.Count > 1) Players.RemoveAt(Players.Count - 1); }
+    void RemovePlayer()
+    {
+        if (Players.Count > 1)
+        {
+            var removed = Players[^1];
+            Players.RemoveAt(Players.Count - 1);
+            // Clean commander-damage entries referencing the removed player
+            foreach (var p in Players)
+            {
+                var toDrop = p.CommanderDamage.Keys.Where(k => k.StartsWith($"{removed.Id}:")).ToList();
+                foreach (var k in toDrop) p.CommanderDamage.Remove(k);
+            }
+        }
+    }
 
-    void ToggleActive(Player p) { foreach (var pl in Players) pl.IsActive = false; p.IsActive = true; }
-    void ChangeLife(Player p, int d)    => p.LifePoints += d;
-    void ChangePlus(Player p, int d)    => p.PlusCounters  = Math.Max(0, p.PlusCounters  + d);
-    void ChangeMinus(Player p, int d)   => p.MinusCounters = Math.Max(0, p.MinusCounters + d);
-    void ChangePoison(Player p, int d)  => p.PoisonCounters= Math.Max(0, p.PoisonCounters+ d);
-    void ResetPlayer(Player p)          { p.LifePoints = 20; p.PlusCounters = p.MinusCounters = p.PoisonCounters = 0; }
+    void ToggleActive(Player p)
+    {
+        foreach (var pl in Players) pl.IsActive = false;
+        p.IsActive = true;
+        ResetTurnTimer();
+    }
+
+    void ChangeLife(Player p, int d) => p.LifePoints += d;
+
+    void ChangeCounter(Player p, string name, int d)
+    {
+        p.Counters.TryGetValue(name, out var v);
+        p.Counters[name] = Math.Max(0, v + d);
+
+        if (AutoPlusMinusCancel && (name == "+1/+1" || name == "-1/-1"))
+        {
+            var plus = p.Counters.GetValueOrDefault("+1/+1");
+            var minus = p.Counters.GetValueOrDefault("-1/-1");
+            var cancel = Math.Min(plus, minus);
+            if (cancel > 0)
+            {
+                p.Counters["+1/+1"] = plus - cancel;
+                p.Counters["-1/-1"] = minus - cancel;
+            }
+        }
+    }
+
+    void AddCounter(Player p)
+    {
+        var name = p.PendingCounter == "__custom__"
+            ? p.CustomCounterName.Trim()
+            : p.PendingCounter.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (!p.Counters.ContainsKey(name))
+            p.Counters[name] = 0;
+        p.PendingCounter = "";
+        p.CustomCounterName = "";
+    }
+
+    void RemoveCounter(Player p, string name) => p.Counters.Remove(name);
+
+    string CounterStateClass(string name, int value)
+    {
+        if (value == 0) return "dim";
+        return name switch
+        {
+            "Poison"     => value >= 10 ? "danger" : value >= 5 ? "warning" : "active",
+            "+1/+1"      => "gold",
+            "-1/-1"      => "active",
+            "Energy"     => "energy",
+            "Experience" => "xp",
+            _            => "active"
+        };
+    }
+
+    string CounterIcon(string name) => name switch
+    {
+        "Poison"     => "☠",
+        "+1/+1"      => "+",
+        "-1/-1"      => "−",
+        "Energy"     => "⚡",
+        "Experience" => "✦",
+        "Loyalty"    => "◆",
+        "Charge"     => "◈",
+        "Ki"         => "☯",
+        "Time"       => "⧖",
+        "Fate"       => "✧",
+        "Quest"      => "⚑",
+        "Storage"    => "◉",
+        _            => "●"
+    };
+
+    void CastCommander(Player p, bool partner)
+    {
+        if (partner) p.PartnerCasts++;
+        else p.CommanderCasts++;
+    }
+
+    const string CommanderKey = "commander";
+
+    void ChangeCmdDamage(Player receiver, string key, int d)
+    {
+        receiver.CommanderDamage.TryGetValue(key, out var v);
+        var nv = Math.Max(0, v + d);
+        var applied = nv - v;
+        receiver.CommanderDamage[key] = nv;
+        receiver.LifePoints -= applied;
+    }
+
+    void ClearNotes() => SharedNotes = "";
+
+    void EmblemKey(KeyboardEventArgs e, Player p)
+    {
+        if (e.Key == "Enter") AddEmblem(p);
+    }
+
+    void AddEmblem(Player p)
+    {
+        var txt = p.PendingEmblem.Trim();
+        if (string.IsNullOrWhiteSpace(txt)) return;
+        p.Emblems.Add(txt);
+        p.PendingEmblem = "";
+    }
+
+    void ResetPlayer(Player p)
+    {
+        p.LifePoints = StartingLife;
+        foreach (var k in p.Counters.Keys.ToList()) p.Counters[k] = 0;
+        p.CommanderCasts = 0;
+        p.PartnerCasts = 0;
+        p.CommanderDamage.Clear();
+        p.Emblems.Clear();
+    }
 
     void ResetAll()
     {
-        TurnCount = 1; CoinResult = null; CoinHistory.Clear();
+        TurnCount = 1;
+        CoinResult = null; CoinHistory.Clear();
         DiceResult = null; DiceHistory.Clear(); DiceClass = "";
+        SharedNotes = "";
         foreach (var p in Players) ResetPlayer(p);
         if (Players.Any()) { foreach (var pl in Players) pl.IsActive = false; Players[0].IsActive = true; }
+        ResetTurnTimer();
+    }
+
+    string LifeClass(Player p)
+    {
+        if (p.LifePoints <= 5) return "danger";
+        if (p.LifePoints <= 10) return "warning";
+        return "";
     }
 
     void NextTurn()
@@ -309,6 +724,7 @@
         TurnCount++;
         var i = Players.FindIndex(p => p.IsActive);
         if (i >= 0) { Players[i].IsActive = false; Players[(i + 1) % Players.Count].IsActive = true; }
+        ResetTurnTimer();
     }
     void PrevTurn()
     {
@@ -316,6 +732,36 @@
         TurnCount--;
         var i = Players.FindIndex(p => p.IsActive);
         if (i >= 0) { Players[i].IsActive = false; Players[(i - 1 + Players.Count) % Players.Count].IsActive = true; }
+        ResetTurnTimer();
+    }
+
+    void ResetTurnTimer()
+    {
+        _accumulated = TimeSpan.Zero;
+        _turnStartedAt = DateTime.Now;
+        TimerPaused = false;
+    }
+
+    void ToggleTimerPause()
+    {
+        if (TimerPaused)
+        {
+            _turnStartedAt = DateTime.Now;
+            TimerPaused = false;
+        }
+        else
+        {
+            _accumulated += DateTime.Now - _turnStartedAt;
+            TimerPaused = true;
+        }
+    }
+
+    string FormatTime(int seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.TotalHours >= 1
+            ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
     }
 
     async Task TossCoin()

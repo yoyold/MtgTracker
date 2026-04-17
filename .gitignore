@@ -61,3 +61,9 @@ nunit-*.xml
 # OS
 .DS_Store
 Thumbs.db
+
+# Publish output
+[Pp]ublish/
+
+# Claude Code
+.claude/
